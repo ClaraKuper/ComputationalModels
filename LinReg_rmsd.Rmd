@@ -1,0 +1,97 @@
+---
+title: "Parameter Estimation - linear regressions and simplex"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Written 2020 by Clara Kuper
+
+```{r}
+#simulating data from a linear regression
+intercept <- 30
+rho       <- 0.8
+slope     <- 5
+nDataPts  <- 40
+
+# as implemented in Farrell, Lewandowski 2018
+data <- matrix(0,nDataPts,2)
+data[,2] <- rnorm(nDataPts)
+data[,1] <- rnorm(nDataPts)*sqrt(1.0 - rho^2)+data[,2]*rho+intercept
+
+# as implemented with slope and error (CK)
+data2 <- matrix(0,nDataPts,2)
+data2[,2] <- data[,2]
+data2[,1] <- (data2[,2]*slope+intercept) + rnorm(nDataPts,0,rho)
+
+plot(data[,2],data[,1])
+plot(data2[,2],data2[,1])
+```
+Questions to this part:
+
+what is the difference between simulation the data as in model1 or simulating it as in model2.
+
+what is the advantage of having (like in model one) the same parameter for the slope of the linear regression and for the width of the error distribution?
+```{r}
+# regression analysis -traditional
+reg1 <- lm(data[,1]~data[,2])
+reg2 <- lm(data[,1]~data[,2])
+
+summary(reg1)
+summary(reg2)
+```
+
+```{r}
+# parameter estimates using the optim function
+startParams <- c(5,0.1)
+names(startParams) <- c("b1","b0")
+
+# current data and preditions are being plotted
+getregpred <- function(params,data){
+  # here, we calculate the data from our independent variable under the assumption of the parameters b0(intercept) and b1(slope). Note that the names are hard coded here and that this function will only work for a linear regression. This is similar to the function that generated the data, but without the error term.
+  getregpred <- params["b0"] + params["b1"]*data[,2]
+  
+  # draw graph when key is pressed
+  par(ask=FALSE)
+  plot(data[,2],type="n", las = 1, ylim = c(25,35),xlim=c(-2,2),xlab="X",ylab="Y")
+  par(ask=FALSE)
+  points(data[,2],data[,1],pch=21,bg="gray")
+  lines(data[,2],getregpred,lty="solid")
+  
+  # return the computed regression data so we can calculate the deviation to the measured data
+  return(getregpred)
+}
+
+# Get the computed predictions and compute how much they deviate
+
+rmsd <- function(params,data1){
+  # generate predictions
+  preds <- getregpred(params,data1)
+  #evaluate the deviation, this computes the sum of squared deviations between data points and devides by the total number of data points to get the mean summed square deviation
+  rmsd <- sqrt(sum((preds-data1[,1])^2)/length(preds))
+}
+
+#the parameter estimation with 
+# for model1
+xout1 <- optim(startParams,rmsd,data1=data)
+
+# for model2
+xout2 <- optim(startParams,rmsd, data1=data2)
+
+```
+
+questions on this part:
+Why do I not need to return a value for the rmsd function?
+
+What does the "value" output indicate?
+
+What happens inside the optim function?
+The optim function, as default uses a simplex algorithm.
+A simplex algorithm evaluates two points in the parameter space and flips to that side of the space that has the lower residual error. The flipping can be accompanied by a stretch of the simplex or by a narrowing. 
+
+Suggestion for next exercises:
+
+1. fit a non-linear model
+2. fit a model where the error surface has several local minimae 
