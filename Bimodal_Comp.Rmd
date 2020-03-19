@@ -1,0 +1,90 @@
+---
+title: "Bimodal Distribution"
+output: html_notebook
+---
+
+In this notebook, we try to fit a bimodal distribution, first with a uniform distribution, using two methods - one that should be robust against local minima and one that isn't. Next, we will fit the data with a polynomial that should capture the bimodality.
+
+```{r}
+# Generate the data (the data could be saccades and express saccades, for example)
+lat_sac <- 150  # mean latency for a saccade
+lat_exp <- 100  # mean latency for an express saccade
+
+width   <- 10   # width of the gaussian
+
+# generate data with 1500 data points for normal saccades and 500 data points for express saccades
+lat<-c(rnorm(1500,lat_sac,width),rnorm(500,lat_exp,width))
+
+hist(lat)
+```
+
+```{r}
+# Step One: try fit a unimodal distribution using simplex
+
+# There are two parameters - the mean of the distribution and the width of the distribution
+# This is just an uneducated guess
+startParams <- c(100,30)
+names(startParams) <- c("b0","b1")
+
+n <- length(lat)
+
+# current data and preditions are being plotted
+getregpred <- function(params,data){
+  # here, we calculate the data from our independent variable under the assumption of the parameters assuming values b0(mean) and b1(width). Note that the names are hard coded here and that this function will only work for a linear regression. This is similar to the function that generated the data, but without the error term.
+  getregpred <- rnorm(n,params["b0"],params["b1"])
+  
+  # return the computed regression data so we can calculate the deviation to the measured data
+  return(getregpred)
+}
+
+# Get the computed predictions and compute how much they deviate
+
+rmsd <- function(params,data1){
+  # generate predictions
+  preds <- getregpred(params,data1)
+  #evaluate the deviation, this computes the sum of squared deviations between data points and devides by the total number of data points to get the mean summed square deviation
+  rmsd <- sqrt(sum((preds-data1)^2)/length(preds))
+}
+
+```
+
+```{r}
+# Start the optimalization process with simplex:
+reps <- 100
+param_tableSMPLX <- matrix(0,reps,2) 
+
+for(r in 1:reps){
+  xoutSMPLX   <- optim(startParams,rmsd,data1=lat)
+  param_tableSMPLX[r,1] <- xoutSMPLX$par[1]
+  param_tableSMPLX[r,2] <- xoutSMPLX$par[2]
+}
+
+summary(param_tableSMPLX)
+```
+
+```{r}
+# compare to an estimation with simulated annealing (more robust for local minimae)
+
+reps <- 1
+param_tableSA <- matrix(0,reps,2) 
+
+for(r in 1:reps){
+  xoutSA   <- optim(startParams,rmsd,data1=lat,method = "SANN")
+  param_tableSA[r,1] <- xoutSA$par[1]
+  param_tableSA[r,2] <- xoutSA$par[2]
+}
+
+summary(param_tableSA)
+
+simDataSA <- rnorm(n,xoutSA$par[1],xoutSA$par[2])
+
+hist(lat)
+hist(simDataSA)
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

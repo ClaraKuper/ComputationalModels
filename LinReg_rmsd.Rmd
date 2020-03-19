@@ -31,7 +31,7 @@ plot(data2[,2],data2[,1])
 ```
 Questions to this part:
 
-what is the difference between simulation the data as in model1 or simulating it as in model2.
+what is the difference between simulation the data as in model1 or simulating it as in model2?
 
 what is the advantage of having (like in model one) the same parameter for the slope of the linear regression and for the width of the error distribution?
 ```{r}
