@@ -23,7 +23,7 @@ hist(lat)
 
 # There are two parameters - the mean of the distribution and the width of the distribution
 # This is just an uneducated guess
-startParams <- c(100,30)
+startParams <- c(200,30)
 names(startParams) <- c("b0","b1")
 
 n <- length(lat)
@@ -33,6 +33,10 @@ getregpred <- function(params,data){
   # here, we calculate the data from our independent variable under the assumption of the parameters assuming values b0(mean) and b1(width). Note that the names are hard coded here and that this function will only work for a linear regression. This is similar to the function that generated the data, but without the error term.
   getregpred <- rnorm(n,params["b0"],params["b1"])
   
+  #plt1 <- hist(data,breaks = 20, plot = FALSE)
+  #plt2 <- hist(getregpred, breaks = 40, plot= FALSE)
+  #plot(plt1,col=rgb(0,0,1,1/4), xlim=c(0,200))
+  #plot(plt2,col=rgb(1,0,0,1/4), xlim=c(0,200), add=TRUE)
   # return the computed regression data so we can calculate the deviation to the measured data
   return(getregpred)
 }
@@ -49,23 +53,35 @@ rmsd <- function(params,data1){
 ```
 
 ```{r}
-# Start the optimalization process with simplex:
+# Start the optimalization process with boundaries (L-BFGS-B):
 reps <- 100
-param_tableSMPLX <- matrix(0,reps,2) 
+param_tableSMPL <- matrix(0,reps,2) 
 
 for(r in 1:reps){
-  xoutSMPLX   <- optim(startParams,rmsd,data1=lat)
-  param_tableSMPLX[r,1] <- xoutSMPLX$par[1]
-  param_tableSMPLX[r,2] <- xoutSMPLX$par[2]
+  xoutSMPL   <- optim(startParams,rmsd,data1=lat,method = "L-BFGS-B", lower = 0)
+  param_tableSMPL[r,1] <- xoutSMPL$par[1]
+  param_tableSMPL[r,2] <- xoutSMPL$par[2]
 }
 
-summary(param_tableSMPLX)
+summary(param_tableSMPL)
+simMean  <- mean(param_tableSMPL[,1])
+simWidth <- mean(param_tableSMPL[,2])
+simDataSMPL <- rnorm(n,simMean,simWidth)
+
+plt1 <- hist(lat,breaks = 20, plot = FALSE)
+plt2 <- hist(simDataSMPL, breaks = 40, plot= FALSE)
+plot(plt1,col=rgb(0,0,1,1/4), xlim=c(0,200))
+plot(plt2,col=rgb(1,0,0,1/4), xlim=c(0,200), add=TRUE)
+
 ```
+
+The result of this fitting method depends on the parameters chosen in the beginning - estimation seems to reflect the intial input parameters rather than the underlying parameters.
+
 
 ```{r}
 # compare to an estimation with simulated annealing (more robust for local minimae)
 
-reps <- 1
+reps <- 5
 param_tableSA <- matrix(0,reps,2) 
 
 for(r in 1:reps){
@@ -75,13 +91,71 @@ for(r in 1:reps){
 }
 
 summary(param_tableSA)
+simMeanSA <- mean(param_tableSA[,1])
+simWidthSA <- mean(param_tableSA[,2])
 
-simDataSA <- rnorm(n,xoutSA$par[1],xoutSA$par[2])
 
-hist(lat)
-hist(simDataSA)
+simDataSA <- rnorm(n,simMeanSA,simWidthSA)
+
+
+p1 <- hist(lat,breaks = 20, plot = FALSE)
+p2 <- hist(simDataSA, breaks = 40, plot= FALSE)
+plot(p1,col=rgb(0,0,1,1/4), xlim=c(0,200))
+plot(p2,col=rgb(1,0,0,1/4), xlim=c(0,200), add=TRUE)
+
+```
+```{r}
+# Next, we will try to fit a bimodal distribution. This increases the parameter space. 
+# b0 ->  mean normal saccades
+# b1 -> mean express saccades
+# b2 -> width
+
+startParams <- c(200,50,20)
+names(startParams) <- c("b0","b1","b2")
+
+n <- length(lat)
+
+getregpred2 <- function(params,data1){
+  n = length(data1)
+  getregpred2 <- c(rnorm(1500,params["b0"],params["b2"]),rnorm(500,params["b1"],params["b2"]))
+  
+  return(getregpred2)
+}
+
+rmsd2 <- function(params,data1){
+  # generate predictions
+  preds <- getregpred2(params,data1)
+  #evaluate the deviation, this computes the sum of squared deviations between data points and devides by the total number of data points to get the mean summed square deviation
+  rmsd2 <- sqrt(sum((preds-data1)^2)/length(preds))
+}
+
 ```
 
+```{r}
+# Start the optimalization process with boundaries on L-BFGS-B:
+reps <- 100
+param_tableSMPLX_bm <- matrix(0,reps,3) 
+
+for(r in 1:reps){
+  xoutSMPLX_bm   <- optim(startParams,rmsd2,data1=lat,method = "L-BFGS-B", lower = 0)
+  param_tableSMPLX_bm[r,1] <- xoutSMPLX_bm$par[1]
+  param_tableSMPLX_bm[r,2] <- xoutSMPLX_bm$par[2]
+  param_tableSMPLX_bm[r,3] <- xoutSMPLX_bm$par[3]
+}
+
+summary(param_tableSMPLX_bm)
+simMean_bm  <- mean(param_tableSMPLX_bm[,1])
+simMeanEX_bm  <- mean(param_tableSMPLX_bm[,2])
+simWidth_bm <- mean(param_tableSMPLX_bm[,3])
+simDataSMPLX_bm <- c(rnorm(1500,simMean_bm,simWidth_bm),rnorm(500,simMeanEX_bm,simWidth_bm))
+
+
+plot1 <- hist(lat,breaks = 20, plot = FALSE)
+plot2 <- hist(simDataSMPLX_bm, breaks = 40, plot= FALSE)
+plot(plot1,col=rgb(0,0,1,1/4), xlim=c(0,200))
+plot(plot2,col=rgb(1,0,0,1/4), xlim=c(0,200), add=TRUE)
+
+```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
 
