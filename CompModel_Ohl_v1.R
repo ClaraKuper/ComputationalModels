@@ -4,7 +4,7 @@
 #--------------------------------------------------------------------------
 
 #--------------------------------------------------------------------------
-library(minpack.LM)
+library(minpack.lm)
 #--------------------------------------------------------------------------
 
 #--------------------------------------------------------------------------
@@ -66,4 +66,10 @@ xout1 <- optim(startParams,rmsd,data1=df,method="BFGS")
 
 df$fitted_optim <- exp(xout1$par*df$time)
 points(df$time,df$fitted_optim,col="green")
+
+# same model with simplex instead of BFGS
+xout2 <- optim(startParams,rmsd, data1 = df)
+df$fitted_smplx <- exp(xout2$par*df$time)
+points(df$time,df$fitted_smplx, col = "orange")
+
 #--------------------------------------------------------------------------
