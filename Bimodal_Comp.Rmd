@@ -14,14 +14,14 @@ library(ggplot2)
 ```{r}
 # Generate the data (the data could be saccades and express saccades, for example)
 lat_sac <- 150  # mean latency for a saccade
-lat_exp <- 100  # mean latency for an express saccade
+lat_exp <- 80  # mean latency for an express saccade
 
-width   <- 10   # width of the gaussian
+width   <- 5   # width of the gaussian
 
 # generate data with 1500 data points for normal saccades and 500 data points for express saccades
 lat<-c(rnorm(1500,lat_sac,width),rnorm(500,lat_exp,width))
 
-hist(lat)
+hist(lat, breaks = 40)
 ```
 
 
@@ -49,7 +49,11 @@ rmsd <- function(params,data1){
   # generate predictions
   preds <- getregpred(params,data1)
   #evaluate the deviation, this computes the sum of squared deviations between data points and devides by the total number of data points to get the mean summed square deviation
-  rmsd <- sqrt(sum((preds-data1)^2)/length(preds))
+  # first: sort data and predicitons
+  sorted_preds<- sort(preds)
+  sorted_data <- sort(data1)
+  
+  rmsd <- sqrt(sum((sorted_preds-sorted_data)^2)/length(sorted_preds))
 }
 
 
@@ -120,7 +124,7 @@ for(r in 1:reps){
   #choose start parameters
   startParams <- pick_params(param_means,param_width)
   #estimate parameters
-  xoutSMPL   <- optim(startParams,rmsd,data1=lat,method = "L-BFGS-B", lower = rep(0, length(startParams)))
+  xoutSMPL   <- optim(startParams,rmsd,data1=lat,method = "L-BFGS-B", lower = rep(1, length(startParams)), upper = c(300,200))
   #write to table
   param_tableSMPL[r,1] <- xoutSMPL$par[1]
   param_tableSMPL[r,2] <- xoutSMPL$par[2]
@@ -138,6 +142,9 @@ plt1 <- hist(lat,breaks = 40, plot = FALSE)
 plt2 <- hist(simDataSMPL, breaks = 80, plot= FALSE)
 plot(plt1,col=rgb(0,0,1,1/4), xlim=c(0,200))
 plot(plt2,col=rgb(1,0,0,1/4), xlim=c(0,200), add=TRUE)
+
+hist(lat,freq=FALSE, breaks = 40 ,xlim=c(0,200),ylim=c(0,0.1))
+curve(dnorm(x,simMean,simWidth),0,200,add=TRUE)
 
 ```
 
@@ -170,6 +177,7 @@ simWidthSA <- mean(param_tableSA[,2])
 simDataSA <- rnorm(n,simMeanSA,simWidthSA)
 
 #and plot them
+
 p1 <- hist(lat,breaks = 20, plot = FALSE)
 p2 <- hist(simDataSA, breaks = 40, plot= FALSE)
 plot(p1,col=rgb(0,0,1,1/4), xlim=c(0,200))
@@ -181,9 +189,6 @@ plot(p2,col=rgb(1,0,0,1/4), xlim=c(0,200), add=TRUE)
 # b0 -> mean normal saccades
 # b1 -> mean express saccades
 # b2 -> width
-
-startParams <- c(200,50,20)
-names(startParams) <- c("b0","b1","b2")
 
 n <- length(lat)
 
@@ -198,7 +203,10 @@ rmsd2 <- function(params,data1){
   # generate predictions
   preds <- getregpred2(params,data1)
   #evaluate the deviation, this computes the sum of squared deviations between data points and devides by the total number of data points to get the mean summed square deviation
-  rmsd2 <- sqrt(sum((preds-data1)^2)/length(preds))
+  sorted_preds <- sort(preds)
+  sorted_data  <- sort(data1)
+  
+  rmsd2 <- sqrt(sum((sorted_preds-sorted_data)^2)/length(sorted_preds))
 }
 
 pick_params2 <- function(param1, param2, param3){
@@ -222,12 +230,12 @@ param_tableSMPLX_bm <- matrix(0,reps,3)
 
 params_mean1 <- seq(50,200,10)
 params_mean2 <- seq(0,150,10)
-params_width <- seq(0,100,10)
+params_width <- seq(0,20,1)
 
 for(r in 1:reps){
   startParams <- pick_params2(params_mean1,params_mean2,params_width)
   
-  xoutSMPLX_bm   <- optim(startParams,rmsd2,data1=lat,method = "L-BFGS-B", lower = rep(0, length(startParams)))
+  xoutSMPLX_bm   <- optim(startParams,rmsd2,data1=lat,method = "L-BFGS-B", lower = c(1,1,1),upper = c(200,150,50))
   param_tableSMPLX_bm[r,1] <- xoutSMPLX_bm$par[1]
   param_tableSMPLX_bm[r,2] <- xoutSMPLX_bm$par[2]
   param_tableSMPLX_bm[r,3] <- xoutSMPLX_bm$par[3]
@@ -241,9 +249,13 @@ simDataSMPLX_bm <- c(rnorm(1500,simMean_bm,simWidth_bm),rnorm(500,simMeanEX_bm,s
 
 
 plot1 <- hist(lat,breaks = 20, plot = FALSE)
-plot2 <- hist(simDataSMPLX_bm, breaks = 80, plot= FALSE)
+plot2 <- hist(simDataSMPLX_bm, breaks = 20, plot= FALSE)
 plot(plot1,col=rgb(0,0,1,1/4), xlim=c(0,200))
 plot(plot2,col=rgb(1,0,0,1/4), xlim=c(0,200), add=TRUE)
+
+hist(lat,freq=FALSE, breaks = 40 ,xlim=c(0,200),ylim=c(0,0.1))
+curve(dnorm(x,simMean_bm,simWidth_bm),0,200,add=TRUE)
+curve(dnorm(x,simMeanEX_bm,simWidth_bm),0,200,add=TRUE)
 
 ```
 
@@ -252,3 +264,14 @@ Questions:
 The fitting doesn't seem to work well here. What could be the reason?
 
 Is there a way to estimate the proportion of express saccades and normal saccades?
+
+
+
+
+# Next Chapter - Maximum Likelihood
+
+
+```{r}
+
+```
+
