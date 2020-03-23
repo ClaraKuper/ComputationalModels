@@ -6,6 +6,12 @@ output: html_notebook
 In this notebook, we try to fit a bimodal distribution, first with a uniform distribution, using two methods - one that should be robust against local minima and one that isn't. Next, we will fit the data with a polynomial that should capture the bimodality.
 
 ```{r}
+library(ggplot2)
+```
+
+
+
+```{r}
 # Generate the data (the data could be saccades and express saccades, for example)
 lat_sac <- 150  # mean latency for a saccade
 lat_exp <- 100  # mean latency for an express saccade
@@ -17,6 +23,7 @@ lat<-c(rnorm(1500,lat_sac,width),rnorm(500,lat_exp,width))
 
 hist(lat)
 ```
+
 
 ```{r}
 # Step One: try fit a unimodal distribution using simplex
@@ -49,6 +56,41 @@ rmsd <- function(params,data1){
   #evaluate the deviation, this computes the sum of squared deviations between data points and devides by the total number of data points to get the mean summed square deviation
   rmsd <- sqrt(sum((preds-data1)^2)/length(preds))
 }
+
+```
+
+```{r}
+#plot the error surface when the distribution above is fitted with a unimodal model
+#x-axis: mean
+#y-axis: width 
+#z-axis: sum squared deviance
+
+means <- seq(0,200,10)
+widths<- seq(0,100,10)
+
+error_table <- matrix(0,nrow=length(means)*length(widths),ncol=3)
+colnames(error_table) <- c("mean","width","error")
+
+rcount <- 0
+
+for (m in means){
+  for (w in widths){
+    rcount <- rcount+1
+    params <- c(m,w)
+    names(params) <- c("b0","b1")
+    error <- rmsd(params,lat)
+    
+    error_table[rcount,1]  <- m
+    error_table[rcount,2] <- w
+    error_table[rcount,3] <- error
+  }
+}
+
+error_table<-as.data.frame(error_table)
+
+error_surface <- ggplot(data = error_table, aes(mean, width)) + geom_tile(aes(fill = error), colour = "white") + scale_fill_gradient(low = "white",high = "steelblue")
+
+error_surface
 
 ```
 
