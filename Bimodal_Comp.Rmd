@@ -120,7 +120,7 @@ for(r in 1:reps){
   #choose start parameters
   startParams <- pick_params(param_means,param_width)
   #estimate parameters
-  xoutSMPL   <- optim(startParams,rmsd,data1=lat,method = "L-BFGS-B", lower = 0)
+  xoutSMPL   <- optim(startParams,rmsd,data1=lat,method = "L-BFGS-B", lower = rep(0, length(startParams)))
   #write to table
   param_tableSMPL[r,1] <- xoutSMPL$par[1]
   param_tableSMPL[r,2] <- xoutSMPL$par[2]
@@ -178,7 +178,7 @@ plot(p2,col=rgb(1,0,0,1/4), xlim=c(0,200), add=TRUE)
 ```
 ```{r}
 # Next, we will try to fit a bimodal distribution. This increases the parameter space. 
-# b0 ->  mean normal saccades
+# b0 -> mean normal saccades
 # b1 -> mean express saccades
 # b2 -> width
 
@@ -201,15 +201,33 @@ rmsd2 <- function(params,data1){
   rmsd2 <- sqrt(sum((preds-data1)^2)/length(preds))
 }
 
+pick_params2 <- function(param1, param2, param3){
+  b0  <- sample(param1,1)
+  b1  <- sample(param2,1)
+  b2  <- sample(param3,1)
+  
+  startParams <- c(b0,b1,b2)
+  names(startParams) <- c("b0","b1","b2")
+  
+  return(startParams)
+  
+}
+
 ```
 
 ```{r}
 # Start the optimalization process with boundaries on L-BFGS-B:
-reps <- 100
+reps <- 1000
 param_tableSMPLX_bm <- matrix(0,reps,3) 
 
+params_mean1 <- seq(50,200,10)
+params_mean2 <- seq(0,150,10)
+params_width <- seq(0,100,10)
+
 for(r in 1:reps){
-  xoutSMPLX_bm   <- optim(startParams,rmsd2,data1=lat,method = "L-BFGS-B", lower = 0)
+  startParams <- pick_params2(params_mean1,params_mean2,params_width)
+  
+  xoutSMPLX_bm   <- optim(startParams,rmsd2,data1=lat,method = "L-BFGS-B", lower = rep(0, length(startParams)))
   param_tableSMPLX_bm[r,1] <- xoutSMPLX_bm$par[1]
   param_tableSMPLX_bm[r,2] <- xoutSMPLX_bm$par[2]
   param_tableSMPLX_bm[r,3] <- xoutSMPLX_bm$par[3]
@@ -223,7 +241,7 @@ simDataSMPLX_bm <- c(rnorm(1500,simMean_bm,simWidth_bm),rnorm(500,simMeanEX_bm,s
 
 
 plot1 <- hist(lat,breaks = 20, plot = FALSE)
-plot2 <- hist(simDataSMPLX_bm, breaks = 40, plot= FALSE)
+plot2 <- hist(simDataSMPLX_bm, breaks = 80, plot= FALSE)
 plot(plot1,col=rgb(0,0,1,1/4), xlim=c(0,200))
 plot(plot2,col=rgb(1,0,0,1/4), xlim=c(0,200), add=TRUE)
 
