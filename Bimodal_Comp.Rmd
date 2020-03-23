@@ -28,11 +28,6 @@ hist(lat)
 ```{r}
 # Step One: try fit a unimodal distribution using simplex
 
-# There are two parameters - the mean of the distribution and the width of the distribution
-# This is just an uneducated guess
-startParams <- c(200,30)
-names(startParams) <- c("b0","b1")
-
 n <- length(lat)
 
 # current data and preditions are being plotted
@@ -57,16 +52,28 @@ rmsd <- function(params,data1){
   rmsd <- sqrt(sum((preds-data1)^2)/length(preds))
 }
 
+
+# randomly define start parameters
+pick_params <- function(param1,param2){
+  b0  <- sample(param1,1)
+  b1  <- sample(param2,1)
+  
+  startParams <- c(b0,b1)
+  names(startParams) <- c("b0","b1")
+  
+  return(startParams)
+}
+
 ```
 
 ```{r}
 #plot the error surface when the distribution above is fitted with a unimodal model
 #x-axis: mean
 #y-axis: width 
-#z-axis: sum squared deviance
+#color: sum squared deviance
 
 means <- seq(0,200,10)
-widths<- seq(0,100,10)
+widths<- seq(0,200,10)
 
 error_table <- matrix(0,nrow=length(means)*length(widths),ncol=3)
 colnames(error_table) <- c("mean","width","error")
@@ -93,45 +100,68 @@ error_surface <- ggplot(data = error_table, aes(mean, width)) + geom_tile(aes(fi
 error_surface
 
 ```
+Only a local minimum is observed, the model should catch that easily. The minimum of errors is located at ~135 ms mean latency and a narrow width (0).
+
 
 ```{r}
 # Start the optimalization process with boundaries (L-BFGS-B):
-reps <- 100
+# boundaries are used because the mean latency and the width cannot go negative
+# the estimation is repeated "reps" times for a more robust measure (start parameters are fixed)
+
+reps <- 1000
 param_tableSMPL <- matrix(0,reps,2) 
 
+# define a range of start parameters, the function randomly picks one combination before each estimation
+
+param_means  <- seq(0,250,10)
+param_width  <- seq(0,100,10)
+
 for(r in 1:reps){
+  #choose start parameters
+  startParams <- pick_params(param_means,param_width)
+  #estimate parameters
   xoutSMPL   <- optim(startParams,rmsd,data1=lat,method = "L-BFGS-B", lower = 0)
+  #write to table
   param_tableSMPL[r,1] <- xoutSMPL$par[1]
   param_tableSMPL[r,2] <- xoutSMPL$par[2]
 }
 
+#look at table
 summary(param_tableSMPL)
+#average data in table for plotting
 simMean  <- mean(param_tableSMPL[,1])
 simWidth <- mean(param_tableSMPL[,2])
 simDataSMPL <- rnorm(n,simMean,simWidth)
 
-plt1 <- hist(lat,breaks = 20, plot = FALSE)
-plt2 <- hist(simDataSMPL, breaks = 40, plot= FALSE)
+#plot data and estimate
+plt1 <- hist(lat,breaks = 40, plot = FALSE)
+plt2 <- hist(simDataSMPL, breaks = 80, plot= FALSE)
 plot(plt1,col=rgb(0,0,1,1/4), xlim=c(0,200))
 plot(plt2,col=rgb(1,0,0,1/4), xlim=c(0,200), add=TRUE)
 
 ```
 
-The result of this fitting method depends on the parameters chosen in the beginning - estimation seems to reflect the intial input parameters rather than the underlying parameters.
-
+This does not reflect the error surface plotted above - the distribution is broad with no clear maximum, maybe the estimate is driven by the input parameters more than by the data
 
 ```{r}
 # compare to an estimation with simulated annealing (more robust for local minimae)
 
+# lower number of replication, because sann runs for a longer time
 reps <- 5
 param_tableSA <- matrix(0,reps,2) 
 
+param_means  <- seq(0,250,10)
+param_width  <- seq(0,100,10)
+
 for(r in 1:reps){
+  startParams <- pick_params(param_means,param_width)
+  # run the estimation with simulated annealing
   xoutSA   <- optim(startParams,rmsd,data1=lat,method = "SANN")
   param_tableSA[r,1] <- xoutSA$par[1]
   param_tableSA[r,2] <- xoutSA$par[2]
 }
 
+#summarize results
 summary(param_tableSA)
 simMeanSA <- mean(param_tableSA[,1])
 simWidthSA <- mean(param_tableSA[,2])
@@ -139,7 +169,7 @@ simWidthSA <- mean(param_tableSA[,2])
 
 simDataSA <- rnorm(n,simMeanSA,simWidthSA)
 
-
+#and plot them
 p1 <- hist(lat,breaks = 20, plot = FALSE)
 p2 <- hist(simDataSA, breaks = 40, plot= FALSE)
 plot(p1,col=rgb(0,0,1,1/4), xlim=c(0,200))
