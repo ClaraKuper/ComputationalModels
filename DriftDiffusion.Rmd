@@ -94,6 +94,8 @@ rts <- rdiffusion(500,a = genparams["a"],
                   st0=genparams["st0"], s = .1)
 
 
+summary(rts)
+
 # starting values for parameters
 sparms <- c(runif(1, 0.01, 0.4),
             runif(1,0.01, 0.5),
