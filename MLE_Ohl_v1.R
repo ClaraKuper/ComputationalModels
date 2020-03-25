@@ -96,7 +96,6 @@ get_LL_bm <- function(data,mu1,mu2,sigma1=10,sigma2=10,omega = 0.5){
   # sigma2: 10
   # omega: 0.7
   # distribution means mu1 and mu2 are expected as input
-  data <- sort(data)
   
   return(sum(log((omega*(dnorm(data,mu1,sigma1,log=FALSE))) 
                   + ((1-omega)*(dnorm(data,mu2,sigma2,log=FALSE))))))
@@ -173,6 +172,7 @@ LL_surface
 
 ## -------------------------------
 ## this plot doesn't fill in colors... why?
+## it does but the tiles are too small to show in the little plot window
 ##--------------------------------
 
 # ---------------------------------------------------------------------

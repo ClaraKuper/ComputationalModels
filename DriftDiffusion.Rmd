@@ -1,0 +1,149 @@
+---
+title: "Drift diffusion model"
+output: html_notebook
+author: Clara Kuper
+---
+
+Models of choice response times, model, estimation and extensions
+
+General questions:
+
+Why is a drift diffusion process sometimes modelled as ONE accumulator reaching bound A or B (=-A)and sometimes as two accumulators for plan A and B both going for one bound?
+
+1. One drift rate, two bounds = activity in one population can trigger 2 different responses
+2. Two drifts, one bound      = action plans running in parallel
+
+General about drift diffusion models:
+
+7 parameters:
+
+E = drift rate, varies from trial to trial, described by: 
+  v = mean drift rate
+  n = standart deviatation of drift rate
+a = boundary separation
+z = starting point of diffusion process + variablity sz
+Ter= non-decision time + trial-to-trial variability st
+s = noise
+
+3 parameters have no closed-loop solution: E, z and Ter. They vary with each trial and estimation n,sz and st is computationally demanding.
+
+Therefore: fitting with toolbox rtdists
+
+```{r}
+library(rtdists)
+library(ggplot2)
+```
+
+# reponse data is complicated :P 
+and therefore needs to be described with more than 2 parameters if we want to fit a drift diffusion model. 
+
+suggestion by farrell and lewandowski: fit model as quantile probability (proportion positive/negative choices in quantiles of rts)
+
+```{r}
+# application of a drift diffusion model, implementation after farrell and lewandowski
+
+# for conveniance, store the names of the parameters
+# only 6 params, because z is defined as 0.5 a within the function
+names <- c("a","v","t0","sz","st0","sv")
+
+# this function estimates the likelihoods of response data given 7 parameters and returns the summed likelihood, flipped to positive values
+
+diffusionliglik <- function(pars,rt,response){
+  likelihoods <- tryCatch(ddiffusion(rt,        #ddiffusion is a function from rtdist
+                                     response = response, # which boundary was reached? upper/lower
+                                     a = pars["a"],       # distance between boundaries
+                                     v = pars["v"],       # mean drift rate
+                                     t0= pars["t0"],      # non-decision time
+                                     z = 0.5*pars["a"],   # start value on the middle between boundaries
+                                     sz= pars["sz"],      # variability start value
+                                     st0=pars["st0"],     # variability non-decison time
+                                     sv= pars["sv"],      # variability mean drift
+                                     s = .1,              # overall noise to scale with other parameters
+                                     precision = 1),
+                          error = function(e)0)
+  if (any(likelihoods == 0)) return(1e6)
+  return(-sum(log(likelihoods)))
+}
+
+
+
+# example use:
+
+testparams <- c(.2,.5,.1,.02,.01,.1)
+names(testparams) <- names
+
+testRT <- rnorm(500,400,50)
+testRES<- sample(c("lower","upper"),500,replace = TRUE)
+
+diffusionliglik(testparams,testRT,testRES)
+
+```
+
+
+```{r}
+# to estimate the model, we first want to generate reaction time data
+
+genparams <- c(.1,.2,.5,.05,.2,.05) 
+names(genparams) <- names
+rts <- rdiffusion(500,a = genparams["a"],
+                  v = genparams["v"],
+                  t0= genparams["t0"],
+                  z = 0.5*genparams["a"], d = 0,
+                  sz= genparams["sz"],
+                  sv= genparams["sv"],
+                  st0=genparams["st0"], s = .1)
+
+
+# starting values for parameters
+sparms <- c(runif(1, 0.01, 0.4),
+            runif(1,0.01, 0.5),
+            0.3,
+            runif(1,0.02,0.08),
+            runif(1,.1,.3),
+            runif(1,0,0.1))
+names(sparms) <- names
+
+# and estimate
+
+fitparams <- optim(sparms, diffusionliglik, gr = NULL, rt=rts$rt, response = rts$response)
+fitparams <- round(fitparams$par,3)
+
+```
+
+```{r}
+# generate data with the new params
+# plot both reaction time distributions
+fitRTs <- rdiffusion(500,a = fitparams["a"],
+                  v = fitparams["v"],
+                  t0= fitparams["t0"],
+                  z = 0.5*fitparams["a"], d = 0,
+                  sz= fitparams["sz"],
+                  sv= fitparams["sv"],
+                  st0=fitparams["st0"], s = .1)
+
+rts   <- as.data.frame(rts)
+fitRTs<-as.data.frame(fitRTs)
+
+## plotted as density distributions
+## any better ideas for visualisation are welcome
+
+plot <- ggplot(data=rts,aes(rt,colour=response))+
+  geom_density(fill = "steelblue",alpha = 0.7)+
+  geom_density(data=fitRTs, fill = "grey",alpha = 0.8)
+
+plot
+
+
+# check if there is a difference between the two data sets, ignoring potential differences between lower and upper responses
+
+diff <- t.test(rts$rt,fitRTs$rt)
+diff
+
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
