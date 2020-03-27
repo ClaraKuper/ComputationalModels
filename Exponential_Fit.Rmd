@@ -1,0 +1,185 @@
+---
+title: "Exponential growth"
+output: html_notebook
+author: "Clara Kuper"
+---
+
+
+```{r}
+## Import libraries
+
+library(ggplot2)
+```
+
+
+In this notebook, we define an exponential function, generate data and fit a model of the data to the function, using maximum likelihood
+
+```{r}
+###############################
+##exponential growth function##
+###############################
+
+exp_growth <- function(t,a=1,b=2,ter=1){
+  # This function returns the exponential after time t
+  # parameters: 
+  # t = time how long the function was growing (unit), no default
+  # a = constant, start value of the the function (units observation at t0), default: 1
+  # b = basis, growth factor of the function, default: 2 (doubling)
+  # ter = time constant, time required to reach the growth factor, default: 1
+  
+  # Example: if this is modeling a rabbit population and 
+  # we observe this population over 30 days, 
+  # the initial population was 20 animals, 
+  # we know that every 2 months, the population is 1.5 times the time it was before, 
+  # we would give it the values:
+  # t = 30 (days)
+  # a = 20 (individuals)
+  # b = 1.5 (factor)
+  # ter = 60 (days)
+  
+  grown_population <- a*b^(t/ter)
+  
+  return(grown_population)
+}
+
+
+# test:
+
+exp_growth(10)
+
+```
+
+Generating a data set
+
+```{r}
+# Define parameters: how long do we observe, what growth rate to we assume etc.
+
+make_exp_data <- function(n,t,params = c(), noise = 0.2){
+  # this function returns a data set with values from time 1 to time t
+  # we assume that n observations are made at each t 
+  # params should be a named list with names "a","b" and "ter" to feed the model
+  # default for params is empty, i.e. default values for the exponential function are used
+  # noise adds a random component to each data point, the size of the noise depends of the value of the data point (the larger the number, the larger the noise)
+  
+  # This function returns a table with n*t entries and two columns - time and population  size 
+  
+  # generate an empty table
+  population_table <- matrix(0,nrow = n*t, ncol = 2)
+  colnames(population_table) <- c("time","population")
+  
+  # repreat observed time points
+  population_table[,1] <- rep((1:t),n)
+  # fill in exponential growth
+  population_table[,2] <- mapply(exp_growth,population_table[,1],MoreArgs=as.list(params))
+  # assign errors
+  error_terms          <- mapply(rnorm,1,0,(noise* population_table[,2]))
+  # final values 
+  population_table[,2] <- population_table[,2]+error_terms
+  
+  # create and return data frame
+  population_table <- as.data.frame(population_table)
+  
+  return(population_table)
+}
+
+
+# define parameters
+params <- c(b=2,ter=2)
+# define number of observations
+n      <- 100
+# define number of observed time points
+t      <- 100
+
+population_table <- make_exp_data(n,t,params)
+
+# plot data
+data_plot <- ggplot(data=population_table,aes(time,population))+
+  geom_point()
+
+data_plot
+
+```
+
+This is our data set, next, we build a framework for ml estimation
+
+```{r}
+LL_exp <- function(data,time,b,ter){
+  # return sum of log likelihood density for an exponential distribution
+  # data: vector of population size
+  # 
+  # I don't know what to enter at the second position of the function dexp .... ?dexp says it should be a "vector of rates" .... I'll just keep it as it is, but I will need help here
+  
+  return (sum(log(dexp(data,b/ter,log=FALSE))))
+}
+
+ml_exponential <- function(data,time,t,startparams = NA){
+  
+  # this functions writes a table for likelihood estimates
+  # startparams should be given in a list of sequences
+  
+  if(is.na(startparams)){
+    # define sequences of start parameters when they are not given by the user
+    b  <- 1:100
+    ter<- 1:100
+  } else {
+    b <- startparams["b"]
+    ter <- startparams["ter"]
+  }
+  
+  #create a large matrix
+  optim_matrix <- matrix(nrow = length(b)*length(ter),ncol = 3)
+  
+  # write all parameters
+  optim_matrix[,1] <- mapply(rep,b, length(ter))
+  optim_matrix[,2] <- ter
+  
+  # estimate likelihood
+  optim_matrix[,3] <- mapply(LL_exp,data,time,optim_matrix[,1],optim_matrix[,2])
+  
+  
+  # return best fit
+  best_fit <- which(optim_matrix[,3]==max(optim_matrix[,3]))
+  
+  if (length(best_fit)>1){
+    print("WARNING, more than one parameter pair maximised likelihood. Returning only one")
+    best_fit <- best_fit[1]
+  }
+  
+  colnames(optim_matrix) <- c("b","ter","ll")
+  optim_matrix <- as.data.frame(optim_matrix)
+  
+  return(optim_matrix)
+}
+
+fit_table <- ml_exponential(population_table$population,population_table$time,t)
+
+fitted_params <- c(b=fit_table$b[which(fit_table$ll==max(fit_table$ll))], ter =fit_table$ter[which(fit_table$ll==max(fit_table$ll))])
+
+print(params)
+print(fitted_params)
+
+```
+
+```{r}
+# plot data and estimation
+
+preds <- matrix(1:100,nrow = 100, ncol=2)
+preds[,2]<- mapply(exp_growth,preds[,2],MoreArgs=as.list(c(fitted_params["b"],fitted_params["ter"])))
+colnames(preds)<- c("time","population")
+
+preds <- as.data.frame(preds)
+
+
+plot <- ggplot(data=population_table, aes(time,log(population)))+
+  geom_point()+
+  geom_line(data=preds,color = "steelblue")
+
+plot
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
