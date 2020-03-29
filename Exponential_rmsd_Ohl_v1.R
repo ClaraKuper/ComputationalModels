@@ -24,8 +24,9 @@ exp_growth <- function(t,a=1,b=2,ter=1){
 # generate data
 x <- seq(1,100)
 y <- exp_growth(x,a=1,b=2,ter=15)
-
+y <- y+y*runif(length(y),-0.1,0.11)
 d <- cbind(x,y)
+d <- as.data.frame(d)
 
 # parameter estimates using the optim function
 startParams <- c(1,2,10)
@@ -51,9 +52,22 @@ rmsd <- function(params,data){
 
 #the parameter estimation with 
 # for model1
-xout1 <- optim(startParams,rmsd,data=d)
+(xout1 <- optim(startParams,rmsd,data=d))
 
 # plot data plus fit
 plot(d)
 y_pred <- exp_growth(d[,1],a=xout1$par[1],b=xout1$par[2],ter=xout1$par[3])
-lines(d[,1],y_pred,col="red")
+lines(d[,1],y_pred,col="green")
+
+# slightly different model works
+nlm1 <- nls(y ~ a + b* exp(x/ter),
+            start = list(a=1,b=1,ter=5),
+            data = d
+)
+lines(d$x,fitted(nlm1),col="red")
+
+# does not work
+#nlm0 <- nls(y ~ a * b^(x/ter),
+#            start = list(a=1,b=1,ter=5),
+#            data = d
+#)
