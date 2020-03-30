@@ -84,16 +84,16 @@ make_exp_data <- function(n,t,params = c(), noise = 0.2){
 
 
 # define parameters
-params <- c(b=2,ter=2)
+params <- c(a=100, b=2,ter=2)
 # define number of observations
-n      <- 100
+n      <- 1
 # define number of observed time points
 t      <- 100
 
 population_table <- make_exp_data(n,t,params)
 
 # plot data
-data_plot <- ggplot(data=population_table,aes(time,population))+
+data_plot <- ggplot(data=population_table,aes(time,log(population)))+
   geom_point()
 
 data_plot
@@ -103,71 +103,73 @@ data_plot
 This is our data set, next, we build a framework for ml estimation
 
 ```{r}
-LL_exp <- function(data,time,b,ter){
-  # return sum of log likelihood density for an exponential distribution
-  # data: vector of population size
-  # 
-  # I don't know what to enter at the second position of the function dexp .... ?dexp says it should be a "vector of rates" .... I'll just keep it as it is, but I will need help here
+rmsd_exp <- function(a,b,ter,data,t){
+  # return sum of rmsd for data set and predictions
   
-  return (sum(log(dexp(data,b/ter,log=FALSE))))
+  pred_params <- c(a=a, b=b, ter = ter)
+  preds <- make_exp_data(n=1,t=100,pred_params,noise = 0)
+  
+  sorted_data <- sort(data)
+  sorted_preds <- sort(preds$population)
+  
+  return(sqrt(sum((sorted_preds-sorted_data)^2)/length(sorted_preds)))
 }
 
-ml_exponential <- function(data,time,t,startparams = NA){
+rmsd_exponential <- function(data,t,startparams = NA){
   
   # this functions writes a table for likelihood estimates
   # startparams should be given in a list of sequences
   
   if(is.na(startparams)){
     # define sequences of start parameters when they are not given by the user
+    a  <- 1:100
     b  <- 1:100
     ter<- 1:100
   } else {
+    a <- startparams["a"]
     b <- startparams["b"]
     ter <- startparams["ter"]
   }
   
   #create a large matrix
-  optim_matrix <- matrix(nrow = length(b)*length(ter),ncol = 3)
+  optim_matrix <- matrix(nrow = length(a)*length(b)*length(ter),ncol = 4)
   
   # write all parameters
-  optim_matrix[,1] <- mapply(rep,b, length(ter))
-  optim_matrix[,2] <- ter
+  optim_matrix[,1] <- mapply(rep,a, length(ter)*length(b))
+  optim_matrix[,2] <- mapply(rep,b, length(ter))
+  optim_matrix[,3] <- ter
   
   # estimate likelihood
-  optim_matrix[,3] <- mapply(LL_exp,data,time,optim_matrix[,1],optim_matrix[,2])
+  optim_matrix[,4] <- mapply(rmsd_exp,optim_matrix[,1],optim_matrix[,2],optim_matrix[,3],MoreArgs = list(data,t))
   
   
   # return best fit
-  best_fit <- which(optim_matrix[,3]==max(optim_matrix[,3]))
+  best_fit <- which(optim_matrix[,4]==min(optim_matrix[,4]))
   
   if (length(best_fit)>1){
     print("WARNING, more than one parameter pair maximised likelihood. Returning only one")
     best_fit <- best_fit[1]
   }
   
-  colnames(optim_matrix) <- c("b","ter","ll")
+  colnames(optim_matrix) <- c("a","b","ter","rmsd")
   optim_matrix <- as.data.frame(optim_matrix)
   
+  fitted_params <- c(a=optim_matrix$a[best_fit],b=optim_matrix$b[best_fit], ter =optim_matrix$ter[best_fit])
+  print(fitted_params)
   return(optim_matrix)
 }
 
-fit_table <- ml_exponential(population_table$population,population_table$time,t)
+fitted_table <- rmsd_exponential(population_table$population,t)
+best_fit     <- which(fitted_table$rmsd == min(fitted_table$rmsd))
 
-fitted_params <- c(b=fit_table$b[which(fit_table$ll==max(fit_table$ll))], ter =fit_table$ter[which(fit_table$ll==max(fit_table$ll))])
-
-print(params)
-print(fitted_params)
+fitted_params <- c(a=fitted_table$a[best_fit] ,b=fitted_table$b[best_fit] ,ter=fitted_table$ter[best_fit])
 
 ```
 
 ```{r}
 # plot data and estimation
 
-preds <- matrix(1:100,nrow = 100, ncol=2)
-preds[,2]<- mapply(exp_growth,preds[,2],MoreArgs=as.list(c(fitted_params["b"],fitted_params["ter"])))
-colnames(preds)<- c("time","population")
-
-preds <- as.data.frame(preds)
+preds <- make_exp_data(n,t,params = fitted_params,noise=0)
 
 
 plot <- ggplot(data=population_table, aes(time,log(population)))+
