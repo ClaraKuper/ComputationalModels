@@ -1,0 +1,154 @@
+---
+title: "Corona - spread time changes"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+### function: exponential growth with slow-down
+
+exp_growth <- function(t,a=1,b=2,ter1=1,ter2=2,ct=5, change=TRUE){
+  
+  if (t>ct && change){
+    grown_population_bf <- a*b^(ct/ter1)
+    grown_population <- grown_population_bf*b^((t-ct)/ter2)
+    }
+  else{
+    grown_population <- a*b^(t/ter1)  
+  }
+  
+  return(grown_population)
+}
+
+exp_growth(6, change = FALSE)
+```
+
+
+```{r}
+make_data <- function(n,t,params = c(), noise = 0.0,change=TRUE){
+  # this function returns a data set with values from time 1 to time t
+  # we assume that n observations are made at each t 
+  # params should be a named list with names "a","b" and "ter" to feed the model
+  # default for params is empty, i.e. default values for the exponential function are used
+  # noise adds a random component to each data point, the size of the noise depends of the value of the data point (the larger the number, the larger the noise)
+  
+  # This function returns a table with n*t entries and two columns - time and population  size 
+  
+  # generate an empty table
+  population_table <- matrix(0,nrow = n*t, ncol = 2)
+  colnames(population_table) <- c("time","population")
+  
+  # repreat observed time points
+  population_table[,1] <- rep((1:t),n)
+  # fill in exponential growth
+  population_table[,2] <- mapply(exp_growth,population_table[,1],MoreArgs=as.list(params,change))
+  # assign errors
+  error_terms          <- mapply(rnorm,1,0,(noise* population_table[,2]))
+  # final values 
+  population_table[,2] <- population_table[,2]+error_terms
+  
+  # create and return data frame
+  population_table <- as.data.frame(population_table)
+  
+  return(population_table)
+}
+```
+
+
+```{r}
+rmsd_exp <- function(a,b,ter1,ter2,ct,data,t,n){
+  # return sum of rmsd for data set and predictions
+  
+  pred_params <- c(a=a, b=b, ter1 = ter1, ter2 = ter2, ct = ct)
+  preds <- make_data(n=n,t=t,pred_params)
+  
+  sorted_data <- log(data$population[order(data$time)])
+  sorted_preds <- log(preds$population[order(preds$time)])
+  
+  return(sqrt(sum((sorted_preds-sorted_data)^2)/length(sorted_preds)))
+}
+
+rmsd_exponential <- function(data,t,n,startparams = NA){
+  
+  # this functions writes a table for likelihood estimates
+  # startparams should be given in a list of sequences
+  
+  if(is.na(startparams)){
+    # define sequences of start parameters when they are not given by the user
+    a  <- 1:2
+    b  <- 1:5
+    ter1<- 1:5
+    ter2<- 1:5
+    ct <- 1:100
+  } else {
+    a <- startparams$a
+    b <- startparams$b
+    ter1 <- startparams$ter1
+    ter2 <- startparams$ter2
+    ct   <- startparams$ct
+    
+  }
+  
+  #create a large matrix
+  optim_matrix <- matrix(nrow = length(a)*length(b)*length(ter1)*length(ter2)*length(ct),ncol = 6)
+  
+  # write all parameters
+  optim_matrix[,1] <- mapply(rep,a, length(ter1)*length(ter2)*length(ct)*length(b))
+  optim_matrix[,2] <- mapply(rep,b, length(ter1)*length(ter2)*length(ct))
+  optim_matrix[,3] <- mapply(rep,ter1, length(ter2)*length(ct))
+  optim_matrix[,4] <- mapply(rep,ter2, length(ct))
+  optim_matrix[,5] <- ct
+  
+  # estimate likelihood
+  optim_matrix[,6] <- mapply(rmsd_exp,optim_matrix[,1],optim_matrix[,2],optim_matrix[,3],optim_matrix[,4],optim_matrix[,5],MoreArgs = list(data,t,n))
+  
+  
+  # return best fit
+  best_fit <- which(optim_matrix[,6]==min(optim_matrix[,6]))
+  
+  if (length(best_fit)>1){
+    print("WARNING, more than one parameter pair maximised likelihood. Returning only one")
+    best_fit <- best_fit[1]
+  }
+  
+  colnames(optim_matrix) <- c("a","b","ter1","ter2","ct","rmsd")
+  optim_matrix <- as.data.frame(optim_matrix)
+  
+  fitted_params <- c(a=optim_matrix$a[best_fit],b=optim_matrix$b[best_fit], ter1 =optim_matrix$ter1[best_fit],ter2 =optim_matrix$ter2[best_fit],ct =optim_matrix$ct[best_fit])
+  print(fitted_params)
+  return(optim_matrix)
+}
+
+data <- read.csv("CovidData.csv",header = TRUE)
+data <- data[c(30:74),c(4,2)]
+colnames(data)<- c("time","population")
+
+starts <- c(a=list(1:2),b=list(1:5),ter1=list(c(0.5,0.7,0.9,1.1,1.3,1.5,1.7,1.9)),ter2=list(c(6.2,6.4,6.6,6.8,7.0,7.2,7.4,7.6,7.8)),ct=list(1:100))
+
+fitted_table <- rmsd_exponential(data,length(data$time),1,starts)
+best_fit     <- which(fitted_table$rmsd == min(fitted_table$rmsd))
+
+fitted_params <- c(a=fitted_table$a[best_fit[1]] ,b=fitted_table$b[best_fit[1]] ,ter1=fitted_table$ter1[best_fit[1]],ter2=fitted_table$ter2[best_fit[1]],ct=fitted_table$ct[best_fit[1]])
+
+
+
+# plot data and estimation
+
+preds <- make_data(1,length(data$time),params = fitted_params,noise=0)
+
+
+plot <- ggplot(data=data, aes(time,log(population)))+
+  geom_point()+
+  geom_line(data=preds,aes((time+30),log(population)),color = "steelblue")
+
+plot
+
+```
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

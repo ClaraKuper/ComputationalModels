@@ -19,7 +19,7 @@ In this notebook, we define an exponential function, generate data and fit a mod
 ##exponential growth function##
 ###############################
 
-exp_growth <- function(t,a=1,b=2,ter=1){
+exp_growth <- function(t,a=1,b=2,ter=1, log=FALSE){
   # This function returns the exponential after time t
   # parameters: 
   # t = time how long the function was growing (unit), no default
@@ -37,7 +37,14 @@ exp_growth <- function(t,a=1,b=2,ter=1){
   # b = 1.5 (factor)
   # ter = 60 (days)
   
-  grown_population <- a*b^(t/ter)
+  if (!log){
+    grown_population <- a*b^(t/ter)  
+  }
+  else if (log){
+    # log formula
+    grown_population <- log(a)+(t/ter)*log(b)
+  }  
+  
   
   return(grown_population)
 }
@@ -45,7 +52,7 @@ exp_growth <- function(t,a=1,b=2,ter=1){
 
 # test:
 
-exp_growth(10)
+exp_growth(10,log=FALSE)
 
 ```
 
@@ -54,7 +61,7 @@ Generating a data set
 ```{r}
 # Define parameters: how long do we observe, what growth rate to we assume etc.
 
-make_exp_data <- function(n,t,params = c(), noise = 0.2){
+make_exp_data <- function(n,t,params = c(), noise = 0.2, log=FALSE){
   # this function returns a data set with values from time 1 to time t
   # we assume that n observations are made at each t 
   # params should be a named list with names "a","b" and "ter" to feed the model
@@ -70,7 +77,7 @@ make_exp_data <- function(n,t,params = c(), noise = 0.2){
   # repreat observed time points
   population_table[,1] <- rep((1:t),n)
   # fill in exponential growth
-  population_table[,2] <- mapply(exp_growth,population_table[,1],MoreArgs=as.list(params))
+  population_table[,2] <- mapply(exp_growth,population_table[,1],MoreArgs=as.list(params,log))
   # assign errors
   error_terms          <- mapply(rnorm,1,0,(noise* population_table[,2]))
   # final values 
@@ -86,14 +93,14 @@ make_exp_data <- function(n,t,params = c(), noise = 0.2){
 # define parameters
 params <- c(a=100, b=2,ter=2)
 # define number of observations
-n      <- 1
+n      <- 50
 # define number of observed time points
-t      <- 100
+t      <- 10
 
 population_table <- make_exp_data(n,t,params)
 
 # plot data
-data_plot <- ggplot(data=population_table,aes(time,log(population)))+
+data_plot <- ggplot(data=population_table,aes(time,population))+
   geom_point()
 
 data_plot
@@ -103,19 +110,19 @@ data_plot
 This is our data set, next, we build a framework for ml estimation
 
 ```{r}
-rmsd_exp <- function(a,b,ter,data,t){
+rmsd_exp <- function(a,b,ter,data,t,n){
   # return sum of rmsd for data set and predictions
   
   pred_params <- c(a=a, b=b, ter = ter)
-  preds <- make_exp_data(n=1,t=100,pred_params,noise = 0)
+  preds <- make_exp_data(n=n,t=t,pred_params,noise = 0,log = FALSE)
   
-  sorted_data <- sort(data)
-  sorted_preds <- sort(preds$population)
+  sorted_data <- log(data$population[order(data$time)])
+  sorted_preds <- log(preds$population[order(preds$time)])
   
   return(sqrt(sum((sorted_preds-sorted_data)^2)/length(sorted_preds)))
 }
 
-rmsd_exponential <- function(data,t,startparams = NA){
+rmsd_exponential <- function(data,t,n,startparams = NA){
   
   # this functions writes a table for likelihood estimates
   # startparams should be given in a list of sequences
@@ -123,12 +130,12 @@ rmsd_exponential <- function(data,t,startparams = NA){
   if(is.na(startparams)){
     # define sequences of start parameters when they are not given by the user
     a  <- 1:100
-    b  <- 1:100
-    ter<- 1:100
+    b  <- 1:10
+    ter<- 1:10
   } else {
-    a <- startparams["a"]
-    b <- startparams["b"]
-    ter <- startparams["ter"]
+    a <- startparams$a
+    b <- startparams$b
+    ter <- startparams$ter
   }
   
   #create a large matrix
@@ -140,7 +147,7 @@ rmsd_exponential <- function(data,t,startparams = NA){
   optim_matrix[,3] <- ter
   
   # estimate likelihood
-  optim_matrix[,4] <- mapply(rmsd_exp,optim_matrix[,1],optim_matrix[,2],optim_matrix[,3],MoreArgs = list(data,t))
+  optim_matrix[,4] <- mapply(rmsd_exp,optim_matrix[,1],optim_matrix[,2],optim_matrix[,3],MoreArgs = list(data,t,n))
   
   
   # return best fit
@@ -159,10 +166,10 @@ rmsd_exponential <- function(data,t,startparams = NA){
   return(optim_matrix)
 }
 
-fitted_table <- rmsd_exponential(population_table$population,t)
+fitted_table <- rmsd_exponential(population_table,t,50)
 best_fit     <- which(fitted_table$rmsd == min(fitted_table$rmsd))
 
-fitted_params <- c(a=fitted_table$a[best_fit] ,b=fitted_table$b[best_fit] ,ter=fitted_table$ter[best_fit])
+fitted_params <- c(a=fitted_table$a[best_fit[1]] ,b=fitted_table$b[best_fit[1]] ,ter=fitted_table$ter[best_fit[1]])
 
 ```
 
@@ -172,12 +179,60 @@ fitted_params <- c(a=fitted_table$a[best_fit] ,b=fitted_table$b[best_fit] ,ter=f
 preds <- make_exp_data(n,t,params = fitted_params,noise=0)
 
 
-plot <- ggplot(data=population_table, aes(time,log(population)))+
+plot <- ggplot(data=population_table, aes(time,population))+
   geom_point()+
   geom_line(data=preds,color = "steelblue")
 
 plot
 ```
+
+
+```{r}
+# Load data from corona cases in Germany
+
+covid_data <- read.csv("CovidData.csv", sep = "," )
+
+covid_data <- covid_data[,c(4,2)]
+colnames(covid_data)<- c("time","population")
+
+starts <- c(a=list(1:2),b=list(1:5),ter=list(c(3.1,3.2,3.3,3.4,3.5,3.6,3.7,3.8,3.9)))
+
+# fit an exponential model to the reported cases
+
+covid_fit <- rmsd_exponential(covid_data,length(covid_data$time),1,starts)
+best_fit     <- which(covid_fit$rmsd == min(covid_fit$rmsd))
+
+covid_params <- c(a=covid_fit$a[best_fit[1]] ,b=covid_fit$b[best_fit[1]] ,ter=covid_fit$ter[best_fit[1]])
+
+
+# plot data and estimation
+
+preds <- make_exp_data(1,length(covid_data$time),params = covid_params,noise=0)
+
+
+plot <- ggplot(data=covid_data, aes(time,population))+
+  geom_point()+
+  geom_line(data=preds,color = "steelblue")
+
+plot
+
+```
+
+The results from this fit suggest that the spread of covid19 in Germany is best described with an exponential function that doubled every 3.9 days.
+
+However, the fit is not very accurate, especially in the beginning (the case numbers seem to increase faster than the model) and towards the end (the case numbers increase slower than the model suggests.)
+
+In the next step, I will try to implement the effect of social distancing measures.
+
+```{r}
+# Effects of contaning the virus
+# For simplicity - we consider all measures together and simulate an effect that leads to longer duplication circles.
+
+
+
+
+```
+
 
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
